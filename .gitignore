@@ -1,0 +1,13 @@
+# Intermediate crawler outputs (rebuilt every run, not needed in git)
+jobs_tencent.json
+bytedance_raw.json
+taotian_raw.json
+eleme_raw.json
+baidu_raw.json
+job_digest.md
+__pycache__/
+*.pyc
+.DS_Store
+
+# NOTE: jobs_data.json and site/ are committed as a baseline so GitHub Pages
+# always has content; CI overwrites them on each scheduled run.
