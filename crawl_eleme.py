@@ -1,8 +1,14 @@
-"""Crawl Eleme (talent.ele.me) off-campus product positions (categories=97)."""
+"""Crawl Eleme (talent.ele.me) product positions via search=产品.
+
+NOTE: talent.ele.me only exposes an OFF-CAMPUS (校招) channel — the
+`/social/position-list` route returns HTTP 404. So Eleme product roles here are
+all 校招. We search 产品 across the off-campus channel (28 roles) instead of the
+narrow categories=97 scope (13 roles) to maximize product coverage.
+"""
 from pwutil import run_with_retry, launch_browser, new_ctx, save_json
 import json
 
-URL = "https://talent.ele.me/off-campus/position-list?categories=97&lang=zh"
+URL = "https://talent.ele.me/off-campus/position-list?lang=zh&search=%E4%BA%A7%E5%93%81"
 
 def click_next(page):
     for sel in ["button.next-next:not(.next-disabled)",

@@ -38,7 +38,11 @@ for i, j in enumerate(jobs):
         "location": j.get("location", ""),
         "experience": j.get("experience", ""),
         "education": j.get("education", ""),
+        "category": j.get("category", ""),
+        "type": j.get("type", ""),
+        "post_id": j.get("post_id", ""),
         "date": j.get("date", ""),
+        "publish_date": j.get("publish_date", ""),
         "description": j.get("description", ""),
         "requirement": j.get("requirement", ""),
         "url": j.get("url", ""),
@@ -103,6 +107,10 @@ HTML = r"""<!DOCTYPE html>
   .today{background:#f53f3f;color:#fff;font-size:12px;padding:2px 7px;border-radius:6px;margin-left:8px}
   .info{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--sub);font-size:13px;margin:8px 0 4px}
   .info span b{color:var(--ink);font-weight:600}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .tag{font-size:12px;padding:3px 9px;border-radius:6px;font-weight:600;white-space:nowrap}
+  .tag-cat{background:#e8f3ff;color:#0052d9}
+  .tag-type{background:#e8ffea;color:#00a854}
   .jdshow{margin-top:8px;font-size:14px;color:#4e5969;white-space:pre-wrap;max-height:120px;overflow:hidden;
           position:relative;transition:max-height .2s}
   .jdshow.open{max-height:none}
@@ -182,7 +190,7 @@ function filtered(){
     if(state.time==="7" && daysAgo(j.date)>7) return false;
     if(state.time==="30" && daysAgo(j.date)>30) return false;
     if(q){
-      const hay=(j.title+" "+(j.description||"")+" "+(j.requirement||"")+" "+(j.location||"")).toLowerCase();
+      const hay=(j.title+" "+(j.description||"")+" "+(j.requirement||"")+" "+(j.location||"")+" "+(j.category||"")+" "+(j.type||"")).toLowerCase();
       if(!hay.includes(q)) return false;
     }
     return true;
@@ -219,7 +227,11 @@ function cardHtml(j){
   if(j.location) info.push("<span><b>城市</b> "+escapeHtml(j.location)+"</span>");
   if(j.experience) info.push("<span><b>经验</b> "+escapeHtml(j.experience)+"</span>");
   if(j.education) info.push("<span><b>学历</b> "+escapeHtml(j.education)+"</span>");
-  if(j.date) info.push("<span><b>更新</b> "+escapeHtml(j.date)+"</span>");
+  if(j.publish_date) info.push("<span><b>发布</b> "+escapeHtml(j.publish_date)+"</span>");
+  // category / type tags
+  let tags="";
+  if(j.category) tags+='<span class="tag tag-cat">'+escapeHtml(j.category)+'</span>';
+  if(j.type) tags+='<span class="tag tag-type">'+escapeHtml(j.type)+'</span>';
   const body = (j.description||"")+"\n\n"+(j.requirement?("【岗位要求】\n"+j.requirement):"");
   const short = body.slice(0,200);
   const needExpand = body.length>200;
@@ -230,6 +242,7 @@ function cardHtml(j){
       <h3>${highlight(j.title,q)}${j.is_today?'<span class="today">今日新发</span>':''}</h3>
       <span class="badge" style="background:${color}">${escapeHtml(j.company)}</span>
     </div>
+    ${tags?('<div class="tags">'+tags+'</div>'):''}
     <div class="info">${info.join("")}</div>
     <div class="jdshow ${open?'open':''}" id="jd-${j.i}">${highlight(short,q)}</div>
     ${needExpand?`<span class="toggle" data-i="${j.i}">${open?'收起 ▲':'展开全文 ▼'}</span>`:''}

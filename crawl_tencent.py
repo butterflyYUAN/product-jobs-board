@@ -81,11 +81,16 @@ def normalize(post, detail):
         pu = "https://" + pu[len("http://"):]
     if not pu.startswith("http"):
         pu = "https://careers.tencent.com" + pu
+    # 腾讯列表/详情接口均不返回学历字段 -> education 留空（源站限制）
     return {
         "company": COMPANY,
         "title": (post.get("RecruitPostName") or "").strip(),
         "location": (post.get("LocationName") or "").strip(),
         "experience": (post.get("RequireWorkYearsName") or "").strip(),
+        "education": "",
+        "category": (post.get("CategoryName") or "产品").strip(),
+        "type": "社招",
+        "post_id": str(post.get("PostId") or ""),
         "description": build_desc(detail) if detail else ((post.get("Responsibility") or "").strip()),
         "date": (detail.get("LastUpdateTime") or post.get("LastUpdateTime") or "").strip(),
         "url": pu,

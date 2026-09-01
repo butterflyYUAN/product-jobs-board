@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Normalize the 5 raw crawls into a single jobs_data.json with a common schema."""
+"""Normalize the 5 raw crawls into a single jobs_data.json with a common schema.
+
+Enhanced schema (v3): keeps richer fields that the source APIs actually return
+but the old version dropped — category (岗位类别), type (社招/校招), post_id,
+city (拆分), publish_date. Salary stays unavailable because none of the public
+list/search endpoints return it (source limitation).
+"""
 import os, json, re, time
 from datetime import datetime, timedelta
 
@@ -25,20 +31,27 @@ def parse_date(v):
         return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
     return ""
 
+REC_TYPE_MAP = {
+    "SOCIAL": "社招", "CAMPUS": "校招", "INTERN": "实习",
+    "校园招聘": "校招", "社会招聘": "社招", "实习": "实习",
+}
+
+def map_type(v):
+    if not v:
+        return ""
+    return REC_TYPE_MAP.get(str(v).upper(), REC_TYPE_MAP.get(str(v), str(v)))
+
 def split_tencent_desc(text):
     """Split combined Tencent description into (responsibility, requirement)."""
     if not text:
         return "", ""
     resp, req = "", ""
-    # requirement marker
     rm = re.search(r"【岗位要求】", text)
     if rm:
         before = text[:rm.start()].strip()
         after = text[rm.end():].strip()
-        # responsibility may also have its own marker
         rrm = re.search(r"【岗位职责】", before)
         resp = (before[rrm.end():] if rrm else before).strip() if rrm else before
-        # strip trailing extra sections from requirement
         for mk in ["【加分项】", "【岗位亮点】"]:
             idx = after.find(mk)
             if idx != -1:
@@ -55,11 +68,18 @@ def norm_tencent(item):
     return {
         "title": item.get("title", ""),
         "location": item.get("location", ""),
+        "city": item.get("city", "") or item.get("location", ""),
         "experience": item.get("experience", ""),
-        "education": "",
+        # Tencent list/detail APIs do NOT expose education -> source limitation
+        "education": item.get("education", "") or "",
+        "category": item.get("category", "") or "产品",
+        "type": item.get("type", "") or "社招",
+        "post_id": item.get("post_id", "") or "",
         "date": parse_date(item.get("date", "")),
+        "publish_date": parse_date(item.get("date", "")),
         "description": resp,
         "requirement": req,
+        "responsibility": resp,
         "url": item.get("url", ""),
         "source_url": item.get("source_url", ""),
     }
@@ -70,20 +90,29 @@ def norm_bytedance(item):
     cl = item.get("city_list") or []
     if not loc and cl:
         loc = "/".join([c.get("name", "") for c in cl if c.get("name")])
+    city = cl[0].get("name", "") if cl else loc
     pub = parse_date(item.get("publish_time"))
+    jc = item.get("job_category") or {}
+    cat = jc.get("name") or ""
     return {
         "title": item.get("title", ""),
         "location": loc,
+        "city": city,
         "experience": "",
         "education": "",
+        "category": cat,
+        "type": map_type(item.get("recruit_type")),
+        "post_id": str(item.get("id", "")),
         "date": pub,
+        "publish_date": pub,
         "description": (item.get("description") or "").strip(),
         "requirement": (item.get("requirement") or "").strip(),
+        "responsibility": (item.get("description") or "").strip(),
         "url": "https://jobs.bytedance.com/experienced/position/" + str(item.get("id", "")),
         "source_url": "https://jobs.bytedance.com/experienced/position?category=6704215864629004552%2C6704215864591255820%2C6704215924712409352%2C6704216224387041544&location=CT_11%2CCT_188",
     }
 
-def norm_taotian(item, domain):
+def norm_taotian(item, domain, source_list_url):
     exp = item.get("experience") or {}
     f, t = exp.get("from"), exp.get("to")
     if f or t:
@@ -100,6 +129,7 @@ def norm_taotian(item, domain):
     deg_s = deg_map.get(deg, deg)
     locs = item.get("workLocations") or []
     loc = "/".join([str(x) for x in locs]) if locs else ""
+    city = locs[0] if locs else ""
     pub = parse_date(item.get("publishTime"))
     purl = item.get("positionUrl") or ""
     if purl.startswith("/"):
@@ -107,24 +137,36 @@ def norm_taotian(item, domain):
     return {
         "title": item.get("name", ""),
         "location": loc,
+        "city": city,
         "experience": exp_s,
         "education": deg_s,
+        "category": item.get("categoryName") or "",
+        "type": map_type(item.get("positionType") or item.get("recruitType")),
+        "post_id": str(item.get("id", "")),
         "date": pub,
+        "publish_date": pub,
         "description": (item.get("description") or "").strip(),
         "requirement": (item.get("requirement") or "").strip(),
+        "responsibility": (item.get("description") or "").strip(),
         "url": purl,
-        "source_url": "https://" + domain + "/off-campus/position-list",
+        "source_url": source_list_url or ("https://" + domain + "/off-campus/position-list"),
     }
 
 def norm_baidu(item):
     return {
         "title": item.get("name", ""),
         "location": item.get("workPlace", "") or "",
+        "city": item.get("workPlace", "") or "",
         "experience": item.get("workYears", "") or "",
         "education": item.get("education", "") or "",
+        "category": item.get("postType") or "",
+        "type": map_type(item.get("recruitType")) or "社招",
+        "post_id": str(item.get("postId", "")),
         "date": parse_date(item.get("publishDate")),
+        "publish_date": parse_date(item.get("publishDate")),
         "description": (item.get("workContent") or "").strip(),
         "requirement": (item.get("serviceCondition") or "").strip(),
+        "responsibility": (item.get("workContent") or "").strip(),
         "url": "https://talent.baidu.com/detail/social/" + str(item.get("postId", "")),
         "source_url": "https://talent.baidu.com/jobs/social-list",
     }
@@ -132,8 +174,8 @@ def norm_baidu(item):
 SOURCES = [
     ("tencent", "腾讯", "jobs_tencent.json", norm_tencent),
     ("bytedance", "字节跳动", "bytedance_raw.json", norm_bytedance),
-    ("taotian", "淘天集团", "taotian_raw.json", lambda it: norm_taotian(it, "talent.taotian.com")),
-    ("eleme", "饿了么", "eleme_raw.json", lambda it: norm_taotian(it, "talent.ele.me")),
+    ("taotian", "淘天集团", "taotian_raw.json", lambda it: norm_taotian(it, "talent.taotian.com", "https://talent.taotian.com/social/position-list?search=%E4%BA%A7%E5%93%81")),
+    ("eleme", "饿了么", "eleme_raw.json", lambda it: norm_taotian(it, "talent.ele.me", "https://talent.ele.me/off-campus/position-list?search=%E4%BA%A7%E5%93%81")),
     ("baidu", "百度", "baidu_raw.json", norm_baidu),
 ]
 
@@ -151,7 +193,6 @@ def main():
             job = fn(it)
             job["company"] = company
             job["company_key"] = key
-            # dedupe
             did = (key, job["title"], job["url"])
             if did in seen:
                 continue
@@ -159,7 +200,6 @@ def main():
             out.append(job)
             cnt += 1
         print(f"{company}: {cnt} normalized")
-    # date sort: unknown dates last
     out.sort(key=lambda j: j["date"] if j["date"] else "0000-00-00", reverse=True)
     today = time.strftime("%Y-%m-%d")
     today_dt = datetime.strptime(today, "%Y-%m-%d")
