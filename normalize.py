@@ -41,30 +41,18 @@ def map_type(v):
         return ""
     return REC_TYPE_MAP.get(str(v).upper(), REC_TYPE_MAP.get(str(v), str(v)))
 
-def split_tencent_desc(text):
-    """Split combined Tencent description into (responsibility, requirement)."""
+def clean(text):
+    """Normalize JD whitespace: unify CRLF/LF, strip, drop zero-width/nbsp junk."""
     if not text:
-        return "", ""
-    resp, req = "", ""
-    rm = re.search(r"【岗位要求】", text)
-    if rm:
-        before = text[:rm.start()].strip()
-        after = text[rm.end():].strip()
-        rrm = re.search(r"【岗位职责】", before)
-        resp = (before[rrm.end():] if rrm else before).strip() if rrm else before
-        for mk in ["【加分项】", "【岗位亮点】"]:
-            idx = after.find(mk)
-            if idx != -1:
-                after = after[:idx].strip()
-                break
-        req = after.strip()
-    else:
-        resp = text
-    return resp, req
+        return ""
+    s = str(text).replace("\r\n", "\n").replace("\r", "\n")
+    s = s.replace("\u200b", "").replace("\u00a0", " ")
+    return s.strip()
 
 def norm_tencent(item):
-    desc = item.get("description", "") or ""
-    resp, req = split_tencent_desc(desc)
+    # crawl_tencent already builds the FULL JD (岗位职责/要求/加分项/亮点) into
+    # `description`; keep it verbatim so no section is dropped.
+    desc = clean(item.get("description", ""))
     return {
         "title": item.get("title", ""),
         "location": item.get("location", ""),
@@ -77,9 +65,9 @@ def norm_tencent(item):
         "post_id": item.get("post_id", "") or "",
         "date": parse_date(item.get("date", "")),
         "publish_date": parse_date(item.get("date", "")),
-        "description": resp,
-        "requirement": req,
-        "responsibility": resp,
+        "description": desc,
+        "requirement": "",
+        "responsibility": desc,
         "url": item.get("url", ""),
         "source_url": item.get("source_url", ""),
     }
@@ -105,9 +93,9 @@ def norm_bytedance(item):
         "post_id": str(item.get("id", "")),
         "date": pub,
         "publish_date": pub,
-        "description": (item.get("description") or "").strip(),
-        "requirement": (item.get("requirement") or "").strip(),
-        "responsibility": (item.get("description") or "").strip(),
+        "description": clean(item.get("description")),
+        "requirement": clean(item.get("requirement")),
+        "responsibility": clean(item.get("description")),
         "url": "https://jobs.bytedance.com/experienced/position/" + str(item.get("id", "")),
         "source_url": "https://jobs.bytedance.com/experienced/position?category=6704215864629004552%2C6704215864591255820%2C6704215924712409352%2C6704216224387041544&location=CT_11%2CCT_188",
     }
@@ -145,9 +133,9 @@ def norm_taotian(item, domain, source_list_url):
         "post_id": str(item.get("id", "")),
         "date": pub,
         "publish_date": pub,
-        "description": (item.get("description") or "").strip(),
-        "requirement": (item.get("requirement") or "").strip(),
-        "responsibility": (item.get("description") or "").strip(),
+        "description": clean(item.get("description")),
+        "requirement": clean(item.get("requirement")),
+        "responsibility": clean(item.get("description")),
         "url": purl,
         "source_url": source_list_url or ("https://" + domain + "/off-campus/position-list"),
     }
@@ -164,9 +152,9 @@ def norm_baidu(item):
         "post_id": str(item.get("postId", "")),
         "date": parse_date(item.get("publishDate")),
         "publish_date": parse_date(item.get("publishDate")),
-        "description": (item.get("workContent") or "").strip(),
-        "requirement": (item.get("serviceCondition") or "").strip(),
-        "responsibility": (item.get("workContent") or "").strip(),
+        "description": clean(item.get("workContent")),
+        "requirement": clean(item.get("serviceCondition")),
+        "responsibility": clean(item.get("workContent")),
         "url": "https://talent.baidu.com/detail/social/" + str(item.get("postId", "")),
         "source_url": "https://talent.baidu.com/jobs/social-list",
     }

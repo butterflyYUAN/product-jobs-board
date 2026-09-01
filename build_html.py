@@ -111,9 +111,12 @@ HTML = r"""<!DOCTYPE html>
   .tag{font-size:12px;padding:3px 9px;border-radius:6px;font-weight:600;white-space:nowrap}
   .tag-cat{background:#e8f3ff;color:#0052d9}
   .tag-type{background:#e8ffea;color:#00a854}
-  .jdshow{margin-top:8px;font-size:14px;color:#4e5969;white-space:pre-wrap;max-height:120px;overflow:hidden;
-          position:relative;transition:max-height .2s}
+  .jdshow{margin-top:8px;font-size:14px;color:#4e5969;white-space:pre-wrap;word-break:break-word;
+          transition:max-height .25s;line-height:1.7}
+  .jdshow.clamp{max-height:170px;overflow:hidden;position:relative}
   .jdshow.open{max-height:none}
+  .jdshow.clamp:not(.open)::after{content:"";position:absolute;left:0;right:0;bottom:0;height:54px;
+          background:linear-gradient(180deg,rgba(255,255,255,0),#fff)}
   .toggle{color:var(--accent);font-size:13px;cursor:pointer;margin-top:4px;user-select:none;display:inline-block}
   .foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px;gap:10px;flex-wrap:wrap}
   .foot a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:600}
@@ -221,6 +224,19 @@ function renderTabs(){
   });
 }
 
+function jdHtml(j){
+  // Render the full JD, preserving the source's line breaks (already \n-separated).
+  // Tencent descriptions already embed 【岗位职责】/【岗位要求】/【加分项】/【岗位亮点】
+  // sections, so show them verbatim; other sources get explicit headers.
+  const d = (j.description||"").trim();
+  const r = (j.requirement||"").trim();
+  const hasSec = /【(岗位)?职责】|【岗位要求】/.test(d);
+  const parts = [];
+  if(d) parts.push(hasSec ? d : ("【岗位职责】\n"+d));
+  if(r && !hasSec) parts.push("【岗位要求】\n"+r);
+  return parts.join("\n\n");
+}
+
 function cardHtml(j){
   const color = COMPANY_COLORS[j.company]||"#888";
   const info=[];
@@ -232,11 +248,10 @@ function cardHtml(j){
   let tags="";
   if(j.category) tags+='<span class="tag tag-cat">'+escapeHtml(j.category)+'</span>';
   if(j.type) tags+='<span class="tag tag-type">'+escapeHtml(j.type)+'</span>';
-  const body = (j.description||"")+"\n\n"+(j.requirement?("【岗位要求】\n"+j.requirement):"");
-  const short = body.slice(0,200);
+  const q = state.q.trim();
+  const body = jdHtml(j);
   const needExpand = body.length>200;
   const open = state.expanded.has(j.i);
-  const q = state.q.trim();
   return `<div class="card">
     <div class="top">
       <h3>${highlight(j.title,q)}${j.is_today?'<span class="today">今日新发</span>':''}</h3>
@@ -244,7 +259,7 @@ function cardHtml(j){
     </div>
     ${tags?('<div class="tags">'+tags+'</div>'):''}
     <div class="info">${info.join("")}</div>
-    <div class="jdshow ${open?'open':''}" id="jd-${j.i}">${highlight(short,q)}</div>
+    <div class="jdshow ${needExpand?'clamp':''} ${open?'open':''}" id="jd-${j.i}">${highlight(body,q)}</div>
     ${needExpand?`<span class="toggle" data-i="${j.i}">${open?'收起 ▲':'展开全文 ▼'}</span>`:''}
     <div class="foot">
       <span class="src">来源：${escapeHtml(j.company)}官方招聘</span>
