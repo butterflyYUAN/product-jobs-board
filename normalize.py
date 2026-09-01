@@ -34,12 +34,26 @@ def parse_date(v):
 REC_TYPE_MAP = {
     "SOCIAL": "社招", "CAMPUS": "校招", "INTERN": "实习",
     "校园招聘": "校招", "社会招聘": "社招", "实习": "实习",
+    # ByteDance / Taotian object leaf-name values
+    "正式": "社招", "实习生": "实习", "外包": "社招",
 }
 
 def map_type(v):
     if not v:
         return ""
-    return REC_TYPE_MAP.get(str(v).upper(), REC_TYPE_MAP.get(str(v), str(v)))
+    if isinstance(v, dict):
+        # ByteDance / Taotian return recruit_type as a structured object:
+        #   {"name": "正式", "parent": {"name": "社招", ...}}
+        # Use the leaf name first (specific: 实习), then fall back to the parent
+        # (top-level 社招 / 校招). Never str() the dict itself.
+        n = str(v.get("name") or "").strip()
+        parent = ((v.get("parent") or {}).get("name") or "").strip()
+        for cand in (n, parent):
+            if cand and cand in REC_TYPE_MAP:
+                return REC_TYPE_MAP[cand]
+        return parent or n  # fall back to whatever label we have
+    s = str(v).strip()
+    return REC_TYPE_MAP.get(s.upper(), REC_TYPE_MAP.get(s, s))
 
 def clean(text):
     """Normalize JD whitespace: unify CRLF/LF, strip, drop zero-width/nbsp junk."""
