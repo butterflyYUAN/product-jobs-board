@@ -70,18 +70,49 @@ def run(script):
 
 
 def main():
+    jp = os.path.join(HERE, "jobs_data.json")
+    prev_backup = jp + ".prev"
+
+    # Back up the previously committed good data. On a fresh CI checkout the raw
+    # crawler outputs are not committed and have no .bak, so this committed copy
+    # is the only fallback if a flaky run degrades the total count.
+    if _nonempty_list(jp):
+        shutil.copyfile(jp, prev_backup)
+
     for script, outs in CRAWLERS:
         run_crawler(script, outs)
     run("normalize.py")
     run("build_html.py")
+
+    # Degradation guard: if the freshly crawled total drops below 50% of the
+    # previously committed count, the crawl most likely partial-failed on a
+    # flaky runner. Keep the previous good jobs_data.json and rebuild the site
+    # from it so the public board never silently shrinks across scheduled runs.
+    if os.path.exists(prev_backup) and _nonempty_list(prev_backup):
+        try:
+            prev_count = len(json.load(open(prev_backup, encoding="utf-8")).get("jobs", []))
+            new_count = len(json.load(open(jp, encoding="utf-8")).get("jobs", [])) if _nonempty_list(jp) else 0
+        except Exception:
+            prev_count = new_count = 0
+        if new_count > 0 and prev_count > 0 and new_count < prev_count * 0.5:
+            print(f"[GUARD] new total {new_count} < 50% of previous {prev_count}; "
+                  f"restoring previous jobs_data.json", flush=True)
+            os.replace(prev_backup, jp)
+            run("build_html.py")
+
     # sanity
-    jp = os.path.join(HERE, "jobs_data.json")
     if os.path.exists(jp):
-        import json as _j
-        n = len(_j.load(open(jp, encoding="utf-8")).get("jobs", []))
+        n = len(json.load(open(jp, encoding="utf-8")).get("jobs", []))
         print(f"\nDONE: jobs_data.json has {n} jobs", flush=True)
     else:
         print("\n[ERROR] jobs_data.json not produced!", flush=True)
+
+    # cleanup temp backup
+    try:
+        if os.path.exists(prev_backup):
+            os.remove(prev_backup)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
